@@ -46,7 +46,11 @@ while IFS= read -r line; do
   else
     tracked+=("$code $path")
   fi
-done < <(git -C "$repo" status --porcelain=v1)
+# --untracked-files=normal is explicit so the gate never depends on a repo/global
+# status.showUntrackedFiles config -- with =no, untracked half-finished work would be
+# silently omitted and a DIRTY repo would read as CLEAN. "normal" (not "all") keeps
+# untracked directories collapsed to one entry so the noise_re above still matches them.
+done < <(git -C "$repo" status --porcelain=v1 --untracked-files=normal)
 
 unpushed=0
 if git -C "$repo" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
