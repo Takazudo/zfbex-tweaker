@@ -9,8 +9,8 @@ The family is 9 repos:
 
 | Repo | Deploy target |
 | --- | --- |
-| [zfb-example-blog](https://github.com/Takazudo/zfb-example-blog) | Cloudflare **Pages** (static) |
-| [zfb-example-corporate-website](https://github.com/Takazudo/zfb-example-corporate-website) | Cloudflare **Pages** (static) |
+| [zfb-example-blog](https://github.com/Takazudo/zfb-example-blog) | **Workers** (static assets) |
+| [zfb-example-corporate-website](https://github.com/Takazudo/zfb-example-corporate-website) | **Workers** (static assets) |
 | [zfb-example-webshop](https://github.com/Takazudo/zfb-example-webshop) | Cloudflare **Workers** (static assets) + **D1** |
 | [zfb-example-ai-summarizer](https://github.com/Takazudo/zfb-example-ai-summarizer) | **Workers** (static assets) + Workers AI |
 | [zfb-example-json-api](https://github.com/Takazudo/zfb-example-json-api) | **Workers** (static assets) |
@@ -19,9 +19,10 @@ The family is 9 repos:
 | [zfb-example-reverse-proxy](https://github.com/Takazudo/zfb-example-reverse-proxy) | **Workers** (static assets) |
 | [zfb-example-workers-cache](https://github.com/Takazudo/zfb-example-workers-cache) | **Workers** (static assets) + Cache |
 
-> The 3 Pages repos (blog / corporate-website / webshop) already have secrets
-> set and deploy today. The 6 Workers repos are freshly extracted and have **no
-> secrets yet** — their `deploy` job self-skips until you add them.
+> **All 9 repos now deploy to Workers Static Assets** — blog and
+> corporate-website were migrated off Cloudflare Pages. Every repo except
+> kv-guestbook is live on a custom domain (see Part 4); kv-guestbook's deploy
+> self-skips until its KV namespace id is provisioned.
 
 ---
 
@@ -33,7 +34,9 @@ the account, it needs the union of every repo's permissions:
 
 | Type | Permission | Access | Why |
 | --- | --- | --- | --- |
-| Account | **Cloudflare Pages** | Edit | blog, corporate-website (`wrangler pages deploy`) |
+| Account | **Workers Scripts** | Edit | every repo (`wrangler deploy`) |
+| Zone | **Workers Routes** | Edit | every custom domain (`custom_domain = true`) |
+| Zone | **DNS** | Edit | Cloudflare creates/manages each custom domain's DNS record + cert |
 | Account | **Workers Scripts** | Edit | webshop + all 6 Workers repos (`wrangler deploy`) |
 | Account | **Workers KV Storage** | Edit | kv-guestbook (create namespace + bind) |
 | Account | **Workers AI** | Read | ai-summarizer (`AI` binding) |
@@ -41,9 +44,10 @@ the account, it needs the union of every repo's permissions:
 | Account | **Account Settings** | Read | wrangler resolves account metadata |
 
 - **Account Resources**: Include → *your account*.
-- **Zone Resources**: none needed — every site uses `*.pages.dev` /
-  `*.workers.dev`, not a custom domain. (Add **Zone · Workers Routes · Edit**
-  only if you later attach a custom domain.)
+- **Zone Resources**: Include → `takazudomodular.com` (or All zones). This is
+  **required** — every site is served on a `*.takazudomodular.com` custom
+  domain. Without both Zone permissions above, `wrangler deploy` fails when it
+  tries to create the route.
 - **Client IP / TTL**: leave default.
 
 > **Blast-radius note.** One broad token that can Edit Pages + Workers + KV + D1
@@ -103,8 +107,8 @@ GitHub secret.
 
 | Repo | Provision (commit the id) | Worker secret(s) | Min token perms |
 | --- | --- | --- | --- |
-| blog | — | — | Pages: Edit |
-| corporate-website | — | — | Pages: Edit |
+| blog | — | — | Workers Scripts: Edit, Zone Workers Routes + DNS: Edit |
+| corporate-website | — | — | Workers Scripts: Edit, Zone Workers Routes + DNS: Edit |
 | webshop | D1 `webshop` + `webshop-preview` (ids already committed; re-provision via its `d1-bootstrap.yml`) | — | Workers Scripts: Edit, D1: Edit |
 | ai-summarizer | — (Workers AI is an account feature, no id) | — | Workers Scripts: Edit, Workers AI: Read |
 | json-api | — | — | Workers Scripts: Edit |
@@ -158,14 +162,30 @@ fallback.
 
 ## Part 4 — Trigger and verify
 
-- **Pages repos** (blog, corporate-website): already live at
-  `https://zfb-example-<name>.pages.dev/`.
-- **Workers repos** (webshop + the 6 new ones): after secrets (and any resource
-  id) are set, push to `main` or re-run the **Deploy** workflow. First
-  `wrangler deploy` *creates* the Worker; the account subdomain is `takazudo`,
-  so the URL is `https://<worker-name>.takazudo.workers.dev` (ai-summarizer's
-  worker is `zfb-example-ai-summarizer-ai`). webshop is already live at
-  `https://zfb-example-webshop.takazudo.workers.dev/`.
+- **Custom domains** — all live except kv-guestbook:
+
+  | Repo | URL |
+  | --- | --- |
+  | blog | https://zfb-example-blog.takazudomodular.com/ |
+  | corporate-website | https://zfb-example-corporate-website.takazudomodular.com/ |
+  | webshop | https://zfb-example-webshop.takazudomodular.com/ |
+  | ai-summarizer | https://zfb-example-ai-summarizer.takazudomodular.com/ |
+  | json-api | https://zfb-example-json-api.takazudomodular.com/ |
+  | password-gate | https://zfb-example-password-gate.takazudomodular.com/ (401 by design — the gate) |
+  | reverse-proxy | https://zfb-example-reverse-proxy.takazudomodular.com/ |
+  | workers-cache | https://zfb-example-workers-cache.takazudomodular.com/ |
+  | kv-guestbook | not deployed — awaiting KV namespace id |
+
+  Each repo's deploy runs a post-deploy smoke check (`pnpm smoke`) against its
+  own domain.
+- **workers.dev URLs still work too.** Each Worker also keeps
+  `https://<worker-name>.takazudo.workers.dev` (`workers_dev = true`), which is
+  what makes per-deploy preview aliases route — `preview_urls` defaults to match
+  `workers_dev`, so both are set explicitly. Note ai-summarizer's worker is
+  named `zfb-example-ai-summarizer-ai`: it deploys with `--env ai`, so its
+  custom-domain route lives under `[[env.ai.routes]]`, not at the top level.
+- **New repo / first deploy**: push to `main` or re-run the **Deploy** workflow.
+  The first `wrangler deploy` creates the Worker and attaches its route.
 
 ```bash
 # re-run the latest Deploy run for a repo without a new commit
