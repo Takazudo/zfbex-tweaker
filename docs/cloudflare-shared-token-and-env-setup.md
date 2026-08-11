@@ -11,7 +11,7 @@ The family is 9 repos:
 | --- | --- |
 | [zfb-example-blog](https://github.com/Takazudo/zfb-example-blog) | **Workers** (static assets) |
 | [zfb-example-corporate-website](https://github.com/Takazudo/zfb-example-corporate-website) | **Workers** (static assets) |
-| [zfb-example-webshop](https://github.com/Takazudo/zfb-example-webshop) | Cloudflare **Workers** (static assets) + **D1** |
+| [zfb-example-webshop](https://github.com/Takazudo/zfb-example-webshop) | **Workers** (static assets) + **D1** |
 | [zfb-example-ai-summarizer](https://github.com/Takazudo/zfb-example-ai-summarizer) | **Workers** (static assets) + Workers AI |
 | [zfb-example-json-api](https://github.com/Takazudo/zfb-example-json-api) | **Workers** (static assets) |
 | [zfb-example-kv-guestbook](https://github.com/Takazudo/zfb-example-kv-guestbook) | **Workers** (static assets) + KV |
@@ -29,15 +29,15 @@ The family is 9 repos:
 ## Part 1 — Create the shared API token
 
 Cloudflare dashboard → **My Profile → API Tokens → Create Token → Create Custom
-Token**. Because one token covers Pages, Workers, KV, Workers AI, and D1 across
-the account, it needs the union of every repo's permissions:
+Token**. Because one token covers Workers, KV, Workers AI, and D1 across the
+account — plus the zone that serves every custom domain — it needs the union of
+every repo's permissions:
 
 | Type | Permission | Access | Why |
 | --- | --- | --- | --- |
 | Account | **Workers Scripts** | Edit | every repo (`wrangler deploy`) |
-| Zone | **Workers Routes** | Edit | every custom domain (`custom_domain = true`) |
-| Zone | **DNS** | Edit | Cloudflare creates/manages each custom domain's DNS record + cert |
-| Account | **Workers Scripts** | Edit | webshop + all 6 Workers repos (`wrangler deploy`) |
+| Zone | **Workers Routes** | Edit | every repo — the custom domain (`custom_domain = true`) |
+| Zone | **DNS** | Edit | every repo — Cloudflare creates/manages each domain's DNS record + cert |
 | Account | **Workers KV Storage** | Edit | kv-guestbook (create namespace + bind) |
 | Account | **Workers AI** | Read | ai-summarizer (`AI` binding) |
 | Account | **D1** | Edit | webshop (`wrangler d1 migrations apply`) |
@@ -50,13 +50,14 @@ the account, it needs the union of every repo's permissions:
   tries to create the route.
 - **Client IP / TTL**: leave default.
 
-> **Blast-radius note.** One broad token that can Edit Pages + Workers + KV + D1
-> across the account is convenient but powerful — anyone who can read any repo's
-> Actions logs cannot see it (secrets are masked), but treat it as sensitive and
-> rotate it if a repo's access changes. If you'd rather minimize scope, mint a
-> narrower token per group instead (Pages-only for the 3 Pages repos;
-> Workers+KV+AI for the 6 Workers repos) — the per-repo "token perms" column in
-> Part 3 shows the minimum each needs.
+> **Blast-radius note.** One token that can Edit Workers + KV + D1 across the
+> account *and* touch DNS on the zone is convenient but powerful — anyone who can
+> read a repo's Actions logs cannot see it (secrets are masked), but treat it as
+> sensitive and rotate it if a repo's access changes. The zone permissions widen
+> it beyond the previous account-only scope: they let the token create and
+> reassign DNS records on `takazudomodular.com`. If you'd rather minimize scope,
+> mint a narrower token per repo using the "extra perms" column in Part 3 on top
+> of the shared baseline.
 
 Copy the token value once (Cloudflare shows it only at creation). You also need
 your **Account ID** (dashboard → any domain → right sidebar, or
@@ -90,9 +91,6 @@ for r in blog corporate-website webshop \
 done
 ```
 
-> The 3 Pages repos already hold an older token — this overwrites them with the
-> shared one, which is fine as long as it carries **Pages · Edit** (it does).
-
 Once the secrets exist, the next push to `main` (or re-run the latest deploy
 workflow) activates the deploy job.
 
@@ -105,17 +103,23 @@ provisioned resource (whose id is committed to the config) and/or a **Worker
 secret**, which is stored on Cloudflare via `wrangler secret put` — **not** a
 GitHub secret.
 
-| Repo | Provision (commit the id) | Worker secret(s) | Min token perms |
+**Every** repo needs the same baseline: `Account · Workers Scripts: Edit`,
+`Account · Account Settings: Read`, and `Zone · Workers Routes: Edit` +
+`Zone · DNS: Edit` — all nine are served on a custom domain, so the zone
+permissions are not optional for any of them. The last column lists only what a
+repo needs **on top** of that baseline.
+
+| Repo | Provision (commit the id) | Worker secret(s) | Extra token perms |
 | --- | --- | --- | --- |
-| blog | — | — | Workers Scripts: Edit, Zone Workers Routes + DNS: Edit |
-| corporate-website | — | — | Workers Scripts: Edit, Zone Workers Routes + DNS: Edit |
-| webshop | D1 `webshop` + `webshop-preview` (ids already committed; re-provision via its `d1-bootstrap.yml`) | — | Workers Scripts: Edit, D1: Edit |
-| ai-summarizer | — (Workers AI is an account feature, no id) | — | Workers Scripts: Edit, Workers AI: Read |
-| json-api | — | — | Workers Scripts: Edit |
-| kv-guestbook | KV namespace ✅ provisioned, id committed | `ADMIN_TOKEN` ✅ set | Workers Scripts: Edit, KV: Edit |
-| password-gate | — | `SITE_PASSWORD` (optional; has a dev fallback) | Workers Scripts: Edit |
-| reverse-proxy | — (`PROXY_ORIGIN` is a public `[vars]` value) | — | Workers Scripts: Edit |
-| workers-cache | — | `PURGE_TOKEN` (optional) | Workers Scripts: Edit |
+| blog | — | — | — |
+| corporate-website | — | — | — |
+| webshop | D1 `webshop` + `webshop-preview` (ids already committed; re-provision via its `d1-bootstrap.yml`) | — | D1: Edit |
+| ai-summarizer | — (Workers AI is an account feature, no id) | — | Workers AI: Read |
+| json-api | — | — | — |
+| kv-guestbook | KV namespace ✅ provisioned, id committed | `ADMIN_TOKEN` ✅ set | Workers KV Storage: Edit |
+| password-gate | — | `SITE_PASSWORD` (optional; has a dev fallback) | — |
+| reverse-proxy | — (`PROXY_ORIGIN` is a public `[vars]` value) | — | — |
+| workers-cache | — | `PURGE_TOKEN` (optional) | — |
 
 ### kv-guestbook — KV + admin token (both done)
 
