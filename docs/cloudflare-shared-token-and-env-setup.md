@@ -19,10 +19,10 @@ The family is 9 repos:
 | [zfb-example-reverse-proxy](https://github.com/Takazudo/zfb-example-reverse-proxy) | **Workers** (static assets) |
 | [zfb-example-workers-cache](https://github.com/Takazudo/zfb-example-workers-cache) | **Workers** (static assets) + Cache |
 
-> **All 9 repos now deploy to Workers Static Assets** — blog and
-> corporate-website were migrated off Cloudflare Pages. Every repo except
-> kv-guestbook is live on a custom domain (see Part 4); kv-guestbook's deploy
-> self-skips until its KV namespace id is provisioned.
+> **All 9 repos deploy to Workers Static Assets and are live on custom
+> domains** (see Part 4). blog and corporate-website were migrated off
+> Cloudflare Pages; kv-guestbook was the last to go live once its KV namespace
+> was provisioned.
 
 ---
 
@@ -112,24 +112,36 @@ GitHub secret.
 | webshop | D1 `webshop` + `webshop-preview` (ids already committed; re-provision via its `d1-bootstrap.yml`) | — | Workers Scripts: Edit, D1: Edit |
 | ai-summarizer | — (Workers AI is an account feature, no id) | — | Workers Scripts: Edit, Workers AI: Read |
 | json-api | — | — | Workers Scripts: Edit |
-| kv-guestbook | **KV namespace** → paste id into `wrangler.toml` | `ADMIN_TOKEN` | Workers Scripts: Edit, KV: Edit |
+| kv-guestbook | KV namespace ✅ provisioned, id committed | `ADMIN_TOKEN` ✅ set | Workers Scripts: Edit, KV: Edit |
 | password-gate | — | `SITE_PASSWORD` (optional; has a dev fallback) | Workers Scripts: Edit |
 | reverse-proxy | — (`PROXY_ORIGIN` is a public `[vars]` value) | — | Workers Scripts: Edit |
 | workers-cache | — | `PURGE_TOKEN` (optional) | Workers Scripts: Edit |
 
-### kv-guestbook — provision KV + set admin token
+### kv-guestbook — KV + admin token (both done)
 
-The committed `wrangler.toml` has `id = "REPLACE_WITH_KV_NAMESPACE_ID"`; the
-deploy job **self-skips** while that placeholder is present. Provision, then
-commit the real id:
+Provisioned and live; this section is kept for re-provisioning.
+
+The repo carries a **`KV bootstrap (one-time)`** workflow that runs
+`wrangler kv namespace create` in CI, where the `CLOUDFLARE_*` secrets actually
+live — preferable to running it locally, which needs your own Cloudflare
+credentials:
 
 ```bash
-cd zfb-example-kv-guestbook
-pnpm install
-pnpm exec wrangler kv namespace create zfb-example-kv-guestbook
-# → copy the printed id into wrangler.toml's [[kv_namespaces]] id, commit, push
+gh workflow run kv-bootstrap.yml --repo Takazudo/zfb-example-kv-guestbook --ref main
+gh run download <run-id> --repo Takazudo/zfb-example-kv-guestbook -n kv-id
+# → paste the id into wrangler.toml's [[kv_namespaces]] id, commit, push
+```
 
-pnpm exec wrangler secret put ADMIN_TOKEN   # admin delete token (Cloudflare-side)
+The deploy job **self-skips** while `REPLACE_WITH_KV_NAMESPACE_ID` is present,
+so nothing goes red before the id lands.
+
+`ADMIN_TOKEN` gates `DELETE /api/entries/<key>` only — the per-entry Delete
+button on the page is deliberately unauthenticated so visitors can exercise the
+demo. Setting the token does not disable those buttons:
+
+```bash
+cd zfb-example-kv-guestbook && pnpm install
+pnpm exec wrangler secret put ADMIN_TOKEN
 ```
 
 ### password-gate — (optional) set the preview password
@@ -174,7 +186,7 @@ fallback.
   | password-gate | https://zfb-example-password-gate.takazudomodular.com/ (401 by design — the gate) |
   | reverse-proxy | https://zfb-example-reverse-proxy.takazudomodular.com/ |
   | workers-cache | https://zfb-example-workers-cache.takazudomodular.com/ |
-  | kv-guestbook | not deployed — awaiting KV namespace id |
+  | kv-guestbook | https://zfb-example-kv-guestbook.takazudomodular.com/ |
 
   Each repo's deploy runs a post-deploy smoke check (`pnpm smoke`) against its
   own domain.
