@@ -23,14 +23,16 @@ repos/zfb-ex/
 They are all built the same way: [zfb](https://github.com/Takazudo/zudo-front-builder)
 (`@takazudo/zfb`, "zudo-front-builder") — a Rust-orchestrated static site builder with
 server-rendered Preact pages and selective client-side hydration ("islands"), a Tailwind v4 design
-system, managed with pnpm. `zfb-example-webshop` additionally deploys to Cloudflare (wrangler). Their
-shared shape is what makes "do X to every one" a sensible operation.
+system, managed with pnpm. Every one of them deploys to Cloudflare on merge to `main` via its own
+`.github/workflows/deploy.yml`; the Workers-binding examples (webshop, kv-guestbook, json-api, …)
+additionally carry wrangler config and bootstrap workflows. Their shared shape is what makes
+"do X to every one" a sensible operation.
 
 Do not assume the list above is complete or fixed — always discover the current set with
 `.claude/skills/l-each/scripts/discover-repos.sh` (any `zfb-example-*` git repo next to
 zfbex-tweaker).
 
-## /l-each — the one skill that matters here
+## The l-* skills
 
 `/l-each <task>` runs the same task across every discovered zfb example site. See
 `.claude/skills/l-each/SKILL.md`. In short:
@@ -43,6 +45,15 @@ Before running anything, `/l-each` enforces a **preparation safety gate**: every
 clean `main`. If a repo has meaningful uncommitted work (a modified page, an untracked source file —
 often an edit someone forgot to commit), `/l-each` stops, reports it, and asks before touching
 anything. Build noise like `.zfb-build/` is ignored; real work is never bulldozed.
+
+`/l-sync` is the lightweight companion: it only checks out `main` and pulls (`--ff-only`) in every
+repo, reporting anything it can't safely touch. It never commits, merges, or force-anything.
+
+`/l-bump-all` is the one full round built on top of both: sync + gate, resolve the
+`@takazudo/zfb*` target read-only, prove it on a pilot repo, dispatch
+`/x -m -a /dev-bump-zudo-deps` to the rest via `/l-each`, then audit the fleet back to convergence.
+Two fleet facts drive its design — the zfb packages are pinned exact and move in lockstep, and
+every repo deploys to Cloudflare on merge, so a bad bump ships rather than merely failing CI.
 
 ## Conventions
 
