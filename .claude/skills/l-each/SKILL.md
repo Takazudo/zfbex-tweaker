@@ -97,6 +97,13 @@ concurrently. Each subagent prompt must:
   instead of the example site, and reported its findings to the session rather than to the worker
   that spawned it (so the worker sat blocked on a result it would never receive).
 
+  Worse, a report that reaches the orchestrator this way **cannot be attributed to the worker whose
+  repo it describes**. In the measured round a review report arrived describing one repo's
+  verification in accurate detail — correct CSS hash and all — while that repo's own worker had
+  received nothing from its review fork and had never run the checklist the report described. The
+  content was real; the source was not what it appeared to be. So never credit a worker with
+  verification you only saw second-hand: confirm it from the repo, or ask the worker directly.
+
   The review case is merely wrong. The dangerous ones are the finalize sub-steps: `/cleanup-resources`
   proposes **closing issues and deleting branches**, and `/pr-complete` drives merges — a wrong-repo
   resolution there acts destructively on the control repo. Tell each worker to pass its repo path
