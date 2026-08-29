@@ -113,18 +113,26 @@ PR, merge, post-merge Deploy, and cleanup.
 
 **Dispatch in batches, not all at once — nine concurrent workers exhaust the session limit.** A
 measured round: the pilot plus nine parallel `/x -m -a` workers, each spawning its own review
-sub-agent, hit `You've hit your session limit` and **every surviving worker died mid-flight at the
-same instant**. They died at different stages — some after merging and verifying, some holding an
-open PR, some mid-checklist — so the fleet was left in a mixed state that no report described.
+sub-agent, hit `You've hit your session limit`, and most workers reported failure mid-flight at
+nearly the same instant — at different stages, some after merging and verifying, some holding an
+open PR, some mid-checklist. The fleet was left in a mixed state that no single report described.
 Prefer two or three batches of three or four. Budget for the review sub-agent each worker spawns; it
 roughly doubles the cost per repo.
 
-**Recovering from a mass worker death is straightforward, so do not re-dispatch blind.** Worker
-reports are lost, but the fleet state is fully recoverable from ground truth, and that is the
-authority regardless: per repo, `git rev-parse origin/main` plus the version in
-`git show origin/main:package.json`, `gh pr list --state open`, and the push-event Deploy run for
-the merge SHA. Reconstruct from those, finish the stragglers by hand, then run Phase 4 as normal —
-Phase 4 is a state audit and does not care who performed the work.
+**A worker that reported failure is not necessarily dead — re-check ground truth immediately before
+you act on its repo.** In the measured round at least one worker continued past its own failure
+notification and completed its full task — merge, deploy verification, cleanup — *after* the
+orchestrator had already surveyed the fleet and recorded its PR as unfinished. Acting on a stale
+survey risks colliding with a live worker (a duplicate merge attempt returned "already merged"
+rather than doing damage, but that was luck, not design). Re-read the repo's state in the same step
+as the action you take on it.
+
+**Recovering is straightforward, so do not re-dispatch blind.** Worker reports may be lost, but the
+fleet state is fully recoverable from ground truth, and that is the authority regardless — including
+over a worker's own account of what it did: per repo, `git rev-parse origin/main` plus the version
+in `git show origin/main:package.json`, `gh pr list --state open`, and the push-event Deploy run for
+the merge SHA. Reconstruct from those, finish whatever is genuinely unfinished, then run Phase 4 as
+normal — Phase 4 is a state audit and does not care who performed the work.
 
 If the pilot needed a source change, hand every worker the pilot's diff and its reasoning — as
 **evidence, not a patch to apply blind**. Each repo still runs its own resolver, install, and
