@@ -6,7 +6,6 @@ description: >-
   reports it instead. Use when the user types /l-sync, or asks to "refresh/sync/update each zfb
   example repo" or "pull latest for all zfb example repos".
 user-invocable: true
-disable-model-invocation: true
 argument-hint: (optional) repo names to limit to, e.g. blog webshop
 ---
 
@@ -18,6 +17,11 @@ that can't be safely touched.
 
 If the user named specific repos in `$ARGUMENTS`, operate on just those; otherwise operate on
 every discovered repo.
+
+**Why there is no `disable-model-invocation` here.** `/l-bump-all` chains this skill via the Skill
+tool, which refuses a model-blocked skill — so the flag must stay off. This skill only checks out
+and fast-forwards `main`, and refuses any repo with real uncommitted work, so model invocation
+cannot destroy anything.
 
 ## Phase 1 — Discover the repos
 

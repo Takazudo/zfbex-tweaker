@@ -8,7 +8,6 @@ description: >-
   /dev-bump-zudo-deps) or a natural-language dev request that defaults to /x -m -a per repo (e.g.
   /l-each footer copyright year is wrong, fix it).
 user-invocable: true
-disable-model-invocation: true
 argument-hint: <slash-command | natural-language dev request>
 ---
 
@@ -19,6 +18,10 @@ zfbex-tweaker is the control repo for a family of zfb example sites that live as
 after first making sure each one is safe to touch.
 
 The task to run is: **$ARGUMENTS**
+
+**Why there is no `disable-model-invocation` here.** `/l-bump-all` chains this skill via the Skill
+tool, which refuses a model-blocked skill — so the flag must stay off. Do not re-add it; add the
+confirmation in Phase 2 instead.
 
 ## Routing: what "the task" means
 
@@ -66,6 +69,12 @@ Then:
   means an edit that was never committed — exactly the thing they would want to know. Ask whether to
   (a) proceed on the CLEAN repos only, or (b) abort so they can resolve it first. Wait for the
   answer.
+- **Not invoked by the user, and the task is the autonomous `/x -m -a` route** → STOP and confirm
+  first. Because this skill is model-invocable (see above), an ambiguous request like "fix the
+  footer year in all the zfb examples" can reach here without the user ever typing `/l-each` — and
+  `/x -m -a` merges and pushes to `main` in every repo on its own. Show the repo list and the exact
+  task, and wait for a go-ahead. An orchestrator that already gated the round (`/l-bump-all`), an
+  explicit `/l-each` invocation, or a non-merging verbatim slash command needs no second gate.
 - **CLEAN repos** → if not already on `main`, switch them:
   ```bash
   git -C <repo-path> checkout main
@@ -81,6 +90,20 @@ concurrently. Each subagent prompt must:
 
 - Pin the work to that repo: every shell command runs with the repo as its working directory (start
   with `cd <repo-path> &&`, or use `git -C <repo-path>`); all file paths stay under it.
+- **Pin the subagent's own children too — this one can do real damage.** A `cd` only binds the shell
+  the subagent runs; any agent that the dispatched task spawns beneath it starts in the *session's*
+  directory — zfbex-tweaker — not the target repo, and `gh`/`git` sub-steps resolve their repo from
+  there. Observed: a `/code-review --fix` reached this way reviewed and edited the control repo
+  instead of the example site, and reported its findings to the session rather than to the worker
+  that spawned it (so the worker sat blocked on a result it would never receive).
+
+  The review case is merely wrong. The dangerous ones are the finalize sub-steps: `/cleanup-resources`
+  proposes **closing issues and deleting branches**, and `/pr-complete` drives merges — a wrong-repo
+  resolution there acts destructively on the control repo. Tell each worker to pass its repo path
+  explicitly to every sub-step, to prefer explicit `--repo` / `git -C` forms over skills that infer
+  the repo from cwd, and to confirm before finishing that it changed nothing outside its own repo.
+  A worker that runs the equivalent audit inline instead of via `/cleanup-resources` is doing the
+  right thing, not cutting a corner.
 - Run the task — the verbatim slash command, or `/x -m -a <request>` — via the Skill tool.
 - Report back tersely: what changed, branch / PR / merge / CI outcome, or the failure reason.
 
