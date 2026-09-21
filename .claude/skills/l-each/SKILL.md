@@ -105,7 +105,7 @@ concurrently. Each subagent prompt must:
   verification you only saw second-hand: confirm it from the repo, or ask the worker directly.
 
   The review case is merely wrong. The dangerous ones are the finalize sub-steps: `/cleanup-resources`
-  proposes **closing issues and deleting branches**, and `/pr-complete` drives merges — a wrong-repo
+  proposes **closing issues and deleting branches**, and `/prc` drives merges — a wrong-repo
   resolution there acts destructively on the control repo. Tell each worker to pass its repo path
   explicitly to every sub-step, to prefer explicit `--repo` / `git -C` forms over skills that infer
   the repo from cwd, and to confirm before finishing that it changed nothing outside its own repo.
