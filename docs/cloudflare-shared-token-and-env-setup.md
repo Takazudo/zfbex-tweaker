@@ -1,11 +1,11 @@
 # Cloudflare shared token + per-repo env setup
 
-Setup guide for deploying the whole **zfb-example** family from GitHub Actions
-using **one shared Cloudflare API token**. All repos deploy to the **same
-Cloudflare account**, so a single account-scoped token works everywhere; each
-repo just needs the same two GitHub Actions secrets.
+Setup guide for the **zfb-example** deployments listed below, using GitHub
+Actions and **one shared Cloudflare API token**. These repos deploy to the same
+Cloudflare account; each needs the same two GitHub Actions secrets, plus the
+resources and Worker secrets described in Part 3.
 
-The family is 9 repos:
+This guide covers these deployments:
 
 | Repo | Deploy target |
 | --- | --- |
@@ -19,7 +19,7 @@ The family is 9 repos:
 | [zfb-example-reverse-proxy](https://github.com/Takazudo/zfb-example-reverse-proxy) | **Workers** (static assets) |
 | [zfb-example-workers-cache](https://github.com/Takazudo/zfb-example-workers-cache) | **Workers** (static assets) + Cache |
 
-> **All 9 repos deploy to Workers Static Assets and are live on custom
+> **All repos listed here deploy to Workers Static Assets and are live on custom
 > domains** (see Part 4). blog and corporate-website were migrated off
 > Cloudflare Pages; kv-guestbook was the last to go live once its KV namespace
 > was provisioned.
@@ -76,7 +76,7 @@ Actions**:
 | `CLOUDFLARE_API_TOKEN` | the shared token from Part 1 |
 | `CLOUDFLARE_ACCOUNT_ID` | your Cloudflare account id |
 
-Fastest path — set both across all 9 repos with `gh` (run with **your own**
+Fastest path — set both across the listed repos with `gh` (run with **your own**
 values; nothing is stored here):
 
 ```bash
@@ -105,7 +105,7 @@ GitHub secret.
 
 **Every** repo needs the same baseline: `Account · Workers Scripts: Edit`,
 `Account · Account Settings: Read`, and `Zone · Workers Routes: Edit` +
-`Zone · DNS: Edit` — all nine are served on a custom domain, so the zone
+`Zone · DNS: Edit` — the listed repos are served on a custom domain, so the zone
 permissions are not optional for any of them. The last column lists only what a
 repo needs **on top** of that baseline.
 
@@ -117,15 +117,19 @@ repo needs **on top** of that baseline.
 | ai-summarizer | — (Workers AI is an account feature, no id) | — | Workers AI: Read |
 | json-api | — | — | — |
 | kv-guestbook | KV namespace ✅ provisioned, id committed | `ADMIN_TOKEN` ✅ set | Workers KV Storage: Edit |
-| password-gate | — | `SITE_PASSWORD` (optional; has a dev fallback) | — |
+| password-gate | — | `SITE_PASSWORD` (required on deployed Workers) | — |
 | reverse-proxy | — (`PROXY_ORIGIN` is a public `[vars]` value) | — | — |
 | workers-cache | — | `PURGE_TOKEN` (optional) | — |
 
 ### kv-guestbook — KV + admin token (both done)
 
-Provisioned and live; this section is kept for re-provisioning.
+Provisioned and live: the `GUESTBOOK` namespace id is already committed in
+[`wrangler.toml`](https://github.com/Takazudo/zfb-example-kv-guestbook/blob/main/wrangler.toml),
+and the custom domain serves the KV-backed guestbook. Ordinary dependency
+updates need no provisioning. Use the steps below only for a fresh setup or
+an intentional replacement of the namespace.
 
-The repo carries a **`KV bootstrap (one-time)`** workflow that runs
+The repo carries a **[`KV bootstrap (one-time)`](https://github.com/Takazudo/zfb-example-kv-guestbook/blob/main/.github/workflows/kv-bootstrap.yml)** workflow that runs
 `wrangler kv namespace create` in CI, where the `CLOUDFLARE_*` secrets actually
 live — preferable to running it locally, which needs your own Cloudflare
 credentials:
@@ -136,8 +140,9 @@ gh run download <run-id> --repo Takazudo/zfb-example-kv-guestbook -n kv-id
 # → paste the id into wrangler.toml's [[kv_namespaces]] id, commit, push
 ```
 
-The deploy job **self-skips** while `REPLACE_WITH_KV_NAMESPACE_ID` is present,
-so nothing goes red before the id lands.
+On an unprovisioned checkout, the deploy job **self-skips** while
+`REPLACE_WITH_KV_NAMESPACE_ID` is present. The current `main` has a real id, so
+its production deploy and KV-backed live smoke test run normally.
 
 `ADMIN_TOKEN` gates `DELETE /api/entries/<key>` only — the per-entry Delete
 button on the page is deliberately unauthenticated so visitors can exercise the
@@ -148,9 +153,12 @@ cd zfb-example-kv-guestbook && pnpm install
 pnpm exec wrangler secret put ADMIN_TOKEN
 ```
 
-### password-gate — (optional) set the preview password
+### password-gate — set the required preview password
 
-Without this, the Worker uses the dev fallback password `preview-open-sesame`.
+A deployed Worker without `SITE_PASSWORD` refuses every login and protected
+asset request. The development fallback applies only to local loopback hosts,
+not to the custom domain or remote preview. Set this as a Cloudflare Worker
+secret; a GitHub Actions secret of the same name does not bind the Worker.
 
 ```bash
 cd zfb-example-password-gate && pnpm install
@@ -178,7 +186,7 @@ fallback.
 
 ## Part 4 — Trigger and verify
 
-- **Custom domains** — all live except kv-guestbook:
+- **Custom domains** — all listed deployments are live, including kv-guestbook:
 
   | Repo | URL |
   | --- | --- |
